@@ -16,9 +16,42 @@ const PLAYER_RADIUS = 18;
 const PLAYER_SPEED = 240;
 const BULLET_SPEED = 760;
 const BULLET_RADIUS = 5;
-const MAGAZINE_SIZE = 24;
-const RELOAD_MS = 1300;
-const SHOOT_COOLDOWN_MS = 180;
+const WEAPONS = {
+  pistol: {
+    name: "Pistol",
+    damage: 25,
+    magazineSize: 24,
+    reloadMs: 1300,
+    cooldownMs: 180,
+    bulletSpeed: 760,
+    pellets: 1,
+    spread: 0
+  },
+  rifle: {
+    name: "Assault Rifle",
+    damage: 18,
+    magazineSize: 30,
+    reloadMs: 1600,
+    cooldownMs: 100,
+    bulletSpeed: 900,
+    pellets: 1,
+    spread: 0
+  },
+  shotgun: {
+    name: "Shotgun",
+    damage: 15,
+    magazineSize: 6,
+    reloadMs: 1800,
+    cooldownMs: 700,
+    bulletSpeed: 650,
+    pellets: 6,
+    spread: 0.24
+  }
+};
+
+const RELOAD_MS = WEAPONS.pistol.reloadMs;
+const MAGAZINE_SIZE = WEAPONS.pistol.magazineSize;
+const SHOOT_COOLDOWN_MS = WEAPONS.pistol.cooldownMs;
 const INPUT_RATE_LIMIT_MS = 40;
 const SHOOT_RATE_LIMIT_MS = 100;
 const MAX_INPUT_ANGLE = Math.PI * 2;
@@ -137,12 +170,25 @@ function startMatch(room) {
     p.y = spawn.y;
     p.hp = 100;
     p.alive = true;
-    p.ammo = MAGAZINE_SIZE;
+
+    p.currentWeapon = "pistol";
+    p.weapons = {
+      pistol: { ammo: WEAPONS.pistol.magazineSize, owned: true },
+      rifle: { ammo: 0, owned: false },
+      shotgun: { ammo: 0, owned: false }
+    };
+
     p.reloadingUntil = 0;
     p.lastShot = 0;
     p.input = { up: false, down: false, left: false, right: false, angle: 0 };
     p.color = playerColors[i++ % playerColors.length];
   }
+  room.pickups = [
+  { id: "rifle-1", weapon: "rifle", x: 350, y: 300 },
+  { id: "rifle-2", weapon: "rifle", x: 1450, y: 900 },
+  { id: "shotgun-1", weapon: "shotgun", x: 1450, y: 300 },
+  { id: "shotgun-2", weapon: "shotgun", x: 350, y: 900 }
+];
   io.to(room.code).emit("matchStarted", { width: WIDTH, height: HEIGHT, obstacles: OBSTACLES });
   emitRoom(room);
 }
@@ -157,13 +203,34 @@ io.on("connection", socket => {
     const name = String(payload?.name || "Player").trim().slice(0, 16) || "Player";
     const code = makeCode();
     const room = {
-      code, hostId: socket.id, status: "lobby", players: new Map(), bullets: [],
-      zone: { x: WIDTH / 2, y: HEIGHT / 2, radius: 820 }, startedAt: 0
+      code,
+      hostId: socket.id,
+      status: "lobby",
+      players: new Map(),
+      bullets: [],
+      pickups: [],
+      zone: { x: WIDTH / 2, y: HEIGHT / 2, radius: 820 },
+      startedAt: 0
     };
     room.players.set(socket.id, {
-      id: socket.id, name, color: playerColors[0], alive: true, ready: true,
-      x: WIDTH / 2, y: HEIGHT / 2, hp: 100, ammo: MAGAZINE_SIZE,
-      reloadingUntil: 0, lastShot: 0,
+      id: socket.id,
+      name,
+      color: playerColors[0],
+      alive: true,
+      ready: true,
+      x: WIDTH / 2,
+      y: HEIGHT / 2,
+      hp: 100,
+
+      currentWeapon: "pistol",
+      weapons: {
+        pistol: { ammo: WEAPONS.pistol.magazineSize, owned: true },
+        rifle: { ammo: 0, owned: false },
+        shotgun: { ammo: 0, owned: false }
+      },
+
+      reloadingUntil: 0,
+      lastShot: 0,
       input: { up: false, down: false, left: false, right: false, angle: 0 }
     });
     rooms.set(code, room);
@@ -182,9 +249,24 @@ io.on("connection", socket => {
     if (room.status !== "lobby") return socket.emit("notice", "That match has already started.");
     if (room.players.size >= MAX_PLAYERS) return socket.emit("notice", "This room is full (10 players maximum).");
     room.players.set(socket.id, {
-      id: socket.id, name, color: playerColors[room.players.size % playerColors.length],
-      alive: true, ready: true, x: WIDTH / 2, y: HEIGHT / 2, hp: 100,
-      ammo: MAGAZINE_SIZE, reloadingUntil: 0, lastShot: 0,
+      id: socket.id,
+      name,
+      color: playerColors[room.players.size % playerColors.length],
+      alive: true,
+      ready: true,
+      x: WIDTH / 2,
+      y: HEIGHT / 2,
+      hp: 100,
+
+      currentWeapon: "pistol",
+      weapons: {
+        pistol: { ammo: WEAPONS.pistol.magazineSize, owned: true },
+        rifle: { ammo: 0, owned: false },
+        shotgun: { ammo: 0, owned: false }
+      },
+
+      reloadingUntil: 0,
+      lastShot: 0,
       input: { up: false, down: false, left: false, right: false, angle: 0 }
     });
     socket.join(code);
@@ -230,34 +312,87 @@ io.on("connection", socket => {
   socket.on("shoot", payload => {
     const room = rooms.get(socket.data.roomCode);
     const p = room?.players.get(socket.id);
-    if (!room || !p || room.status !== "playing" || !p.alive) return;
-    const now = Date.now();
-    if (now < p.reloadingUntil || now - p.lastShot < SHOOT_COOLDOWN_MS || p.ammo <= 0) return;
+
+    if (!room || room.status !== "playing" || !p || !p.alive) return;
     if (!payload || typeof payload !== "object") return;
+
+    const weapon = WEAPONS[p.currentWeapon];
+    const inventory = p.weapons[p.currentWeapon];
+
+    if (!weapon || !inventory || !inventory.owned) return;
+
+    const now = Date.now();
+
+    if (now < p.reloadingUntil) return;
+    if (now - p.lastShot < weapon.cooldownMs) return;
+    if (inventory.ammo <= 0) return;
 
     const angle = Number(payload.angle);
     if (!isValidAngle(angle)) return;
-    p.lastShot = now;
-    p.ammo -= 1;
-    room.bullets.push({
-      id: `${socket.id}-${now}-${Math.random()}`, ownerId: socket.id,
-      x: p.x + Math.cos(angle) * 26, y: p.y + Math.sin(angle) * 26,
-      vx: Math.cos(angle) * BULLET_SPEED, vy: Math.sin(angle) * BULLET_SPEED,
-      life: 1.25
-    });
-  });
 
+    p.lastShot = now;
+    inventory.ammo -= 1;
+
+    for (let i = 0; i < weapon.pellets; i++) {
+      const spreadOffset = weapon.pellets === 1
+        ? 0
+        : (Math.random() - 0.5) * weapon.spread;
+
+      const bulletAngle = angle + spreadOffset;
+
+      room.bullets.push({
+        id: `${socket.id}-${now}-${i}-${Math.random()}`,
+        ownerId: socket.id,
+        damage: weapon.damage,
+        x: p.x + Math.cos(bulletAngle) * 26,
+        y: p.y + Math.sin(bulletAngle) * 26,
+        vx: Math.cos(bulletAngle) * weapon.bulletSpeed,
+        vy: Math.sin(bulletAngle) * weapon.bulletSpeed,
+        life: 1.25
+      });
+    }
+  });
+  socket.on("switchWeapon", weaponName => {
+  const room = rooms.get(socket.data.roomCode);
+  const p = room?.players.get(socket.id);
+
+  if (!room || room.status !== "playing" || !p || !p.alive) return;
+
+  if (!["pistol", "rifle", "shotgun"].includes(weaponName)) return;
+
+  const inventory = p.weapons[weaponName];
+
+  if (!inventory || !inventory.owned) {
+    socket.emit("notice", "You haven't collected that weapon yet.");
+    return;
+  }
+
+  if (p.currentWeapon === weaponName) return;
+
+  p.currentWeapon = weaponName;
+  p.reloadingUntil = 0;
+
+  socket.emit("weaponSwitched", {
+    weapon: weaponName,
+    ammo: inventory.ammo
+  });
+});
   socket.on("reload", () => {
     const room = rooms.get(socket.data.roomCode);
     const p = room?.players.get(socket.id);
-    if (!p || room.status !== "playing" || !p.alive || p.ammo === MAGAZINE_SIZE || Date.now() < p.reloadingUntil) return;
-    p.reloadingUntil = Date.now() + RELOAD_MS;
+
+    if (!room || room.status !== "playing" || !p || !p.alive) return;
+
+    const weapon = WEAPONS[p.currentWeapon];
+    const inventory = p.weapons[p.currentWeapon];
+
+    if (!weapon || !inventory) return;
+    if (!inventory.owned || inventory.ammo >= weapon.magazineSize) return;
+    if (Date.now() < p.reloadingUntil) return;
+
+    p.reloadingUntil = Date.now() + weapon.reloadMs;
   });
-
-  socket.on("leaveRoom", () => removeFromRoom(socket));
-  socket.on("disconnect", () => removeFromRoom(socket));
 });
-
 setInterval(() => {
   const dt = TICK_MS / 1000;
   const now = Date.now();
@@ -269,10 +404,39 @@ setInterval(() => {
     const shrink = Math.min(1, elapsed / 150);
     room.zone.radius = 820 - shrink * 700;
 
+    for (const pickup of room.pickups) {
+      for (const p of room.players.values()) {
+        if (!p.alive) continue;
+
+        if (Math.hypot(p.x - pickup.x, p.y - pickup.y) < PLAYER_RADIUS + 24) {
+          const inventory = p.weapons[pickup.weapon];
+
+          if (inventory && !inventory.owned) {
+            inventory.owned = true;
+            inventory.ammo = WEAPONS[pickup.weapon].magazineSize;
+
+            io.to(p.id).emit("weaponPickedUp", {
+              weapon: pickup.weapon,
+              ammo: inventory.ammo
+            });
+
+            room.pickups = room.pickups.filter(item => item.id !== pickup.id);
+            break;
+          }
+        }
+      }
+    }
+
     for (const p of room.players.values()) {
       if (!p.alive) continue;
       if (p.reloadingUntil && now >= p.reloadingUntil) {
-        p.ammo = MAGAZINE_SIZE;
+        const weapon = WEAPONS[p.currentWeapon];
+        const inventory = p.weapons[p.currentWeapon];
+
+        if (weapon && inventory && inventory.owned) {
+          inventory.ammo = weapon.magazineSize;
+        }
+
         p.reloadingUntil = 0;
         io.to(p.id).emit("reloaded");
       }
@@ -307,7 +471,7 @@ setInterval(() => {
       for (const p of room.players.values()) {
         if (!p.alive || p.id === b.ownerId) continue;
         if (Math.hypot(p.x - b.x, p.y - b.y) < PLAYER_RADIUS + BULLET_RADIUS) {
-          p.hp -= 25;
+          p.hp -= b.damage;
           hit = true;
           io.to(b.ownerId).emit("hitConfirmed", { targetId: p.id, hp: Math.max(0, p.hp) });
           if (p.hp <= 0) {
@@ -327,12 +491,22 @@ setInterval(() => {
 
     io.to(room.code).emit("gameState", {
       players: [...room.players.values()].map(p => ({
-        id: p.id, name: p.name, x: p.x, y: p.y, hp: p.hp, ammo: p.ammo,
-        alive: p.alive, color: p.color, angle: p.input.angle,
+        id: p.id,
+        name: p.name,
+        x: p.x,
+        y: p.y,
+        hp: p.hp,
+        currentWeapon: p.currentWeapon,
+        weapons: p.weapons,
+        ammo: p.weapons[p.currentWeapon].ammo,
+        alive: p.alive,
+        color: p.color,
+        angle: p.input.angle,
         reloading: p.reloadingUntil > now
       })),
       bullets: room.bullets.map(b => ({ id: b.id, x: b.x, y: b.y })),
       zone: room.zone,
+      pickups: room.pickups,
       aliveCount: alive.length,
       elapsed
     });
@@ -342,3 +516,4 @@ setInterval(() => {
 httpServer.listen(PORT, () => {
   console.log(`LAST STAND server listening on http://localhost:${PORT}`);
 });
+

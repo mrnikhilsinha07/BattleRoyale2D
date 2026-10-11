@@ -111,7 +111,18 @@
     $("resultText").textContent = result.winner ? `${result.winner.name} is the last player standing.` : "Everyone was eliminated.";
     show(resultPanel);
   });
-  socket.on("reloaded", () => {});
+  socket.on("reloaded", () => {
+    if (latestState) updateHud(latestState);
+  });
+  socket.on("weaponPickedUp", data => {
+    const name = ({ rifle: "ASSAULT RIFLE", shotgun: "SHOTGUN" })[data?.weapon] || "WEAPON";
+    setGameTip(`${name} collected. Press ${data.weapon === "rifle" ? "2" : "3"} to equip.`);
+  });
+  socket.on("weaponSwitched", data => {
+    const name = ({ pistol: "PISTOL", rifle: "ASSAULT RIFLE", shotgun: "SHOTGUN" })[data?.weapon] || "WEAPON";
+    setGameTip(`Equipped ${name}.`);
+    if (latestState) updateHud(latestState);
+  });
 
   function renderLobby(summary) {
     $("roomCodeDisplay").textContent = summary.code;
@@ -153,7 +164,9 @@
     const me = state.players.find(p => p.id === localPlayerId);
     if (me) {
       $("healthValue").textContent = Math.max(0, Math.ceil(me.hp));
-      $("ammoValue").textContent = `${me.ammo} / 24${me.reloading ? " · RELOADING" : ""}`;
+      const weaponName = ({ pistol: "PISTOL", rifle: "ASSAULT RIFLE", shotgun: "SHOTGUN" })[me.currentWeapon] || "WEAPON";
+      const magazineSize = ({ pistol: 24, rifle: 30, shotgun: 6 })[me.currentWeapon] || 0;
+      $("ammoValue").textContent = `${weaponName} · ${me.ammo} / ${magazineSize}${me.reloading ? " · RELOADING" : ""}`;
       $("healthValue").style.color = me.hp <= 30 ? "#ff6b68" : "#edf4f6";
     }
     $("zoneValue").textContent = state.zone.radius < 200 ? "CRITICAL" : `${Math.ceil(state.zone.radius)}m`;
@@ -185,6 +198,7 @@
         });
         this.zoneGraphics = this.add.graphics().setDepth(2);
         this.bulletGraphics = this.add.graphics().setDepth(5);
+        this.pickupGraphics = this.add.graphics().setDepth(3);
         this.playersLayer = this.add.container(0, 0).setDepth(4);
         this.playerObjects = new Map();
         this.labelObjects = new Map();
@@ -197,6 +211,9 @@
         this.keys = this.input.keyboard.createCursorKeys();
         this.wasd = this.input.keyboard.addKeys("W,A,S,D");
         this.input.keyboard.on("keydown-R", () => socket.emit("reload"));
+        this.input.keyboard.on("keydown-ONE", () => socket.emit("switchWeapon", "pistol"));
+        this.input.keyboard.on("keydown-TWO", () => socket.emit("switchWeapon", "rifle"));
+        this.input.keyboard.on("keydown-THREE", () => socket.emit("switchWeapon", "shotgun"));
         this.input.on("pointerdown", pointer => { if (pointer.leftButtonDown()) pointerDown = true; });
         this.input.on("pointerup", () => pointerDown = false);
         this.input.on("gameout", () => pointerDown = false);
@@ -241,6 +258,19 @@
         this.zoneGraphics.fillCircle(z.x, z.y, z.radius);
         this.zoneGraphics.lineStyle(5, 0x79b9ff, 0.85);
         this.zoneGraphics.strokeCircle(z.x, z.y, z.radius);
+        this.pickupGraphics.clear();
+        (latestState.pickups || []).forEach(pickup => {
+          const isRifle = pickup.weapon === "rifle";
+          const color = isRifle ? 0x79d7ff : 0xffbd69;
+          this.pickupGraphics.fillStyle(0x07110d, 0.75);
+          this.pickupGraphics.fillCircle(pickup.x, pickup.y, 19);
+          this.pickupGraphics.fillStyle(color, 1);
+          this.pickupGraphics.fillRoundedRect(pickup.x - 13, pickup.y - 8, 26, 16, 4);
+          this.pickupGraphics.lineStyle(2, 0xffffff, 0.9);
+          this.pickupGraphics.strokeRoundedRect(pickup.x - 13, pickup.y - 8, 26, 16, 4);
+          this.pickupGraphics.fillStyle(0x14221b, 1);
+          this.pickupGraphics.fillRect(pickup.x - 4, pickup.y - 3, 8, 6);
+        });
         this.bulletGraphics.clear();
         (latestState.bullets || []).forEach(b => {
           this.bulletGraphics.fillStyle(0xfff0a5, 1);
