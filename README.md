@@ -1,68 +1,47 @@
-# BattleRoyale2D
+# LAST STAND
 
-A browser-based 2D multiplayer battle royale game built with
-Phaser and JavaScript, with a Node.js backend for real-time multiplayer.
+A browser-based 2D multiplayer battle royale built with Phaser, Node.js, Express, and Socket.IO.
 
-## Planned Features
+## Current playable build
 
-- Cartoon-style 2D arena
-- Real-time multiplayer for 2–10 players
-- Create Room and Join Room
-- Private rooms with shareable room codes
-- Player movement, aiming, and shooting
-- Health, damage, and elimination system
-- Weapons and ammunition
-- Shrinking safe zone
-- Last-player-standing victory condition
-- Keyboard, mouse, and mobile touch controls
-- Public deployment accessible through a web browser
+- Create a room and share its five-character room code.
+- Join from another browser/device.
+- Host starts a match once at least two players are in the room.
+- Up to 10 players per room.
+- WASD or arrow keys to move; mouse to aim and fire; `R` to reload.
+- Mobile movement pad, fire, and reload controls.
+- Server-managed movement, ammunition, hits, health, eliminations, and shrinking safe zone.
 
-## Technology Stack
+## Requirements
 
-- Phaser 3 — 2D game engine
-- JavaScript — Gameplay logic
-- Node.js — Server runtime
-- Socket.IO — Real-time multiplayer communication
+- Node.js 20+
+- npm
 
-## Development Status
+## Run locally
 
-**Current stage:** Project initialization.
+```bash
+npm install
+npm start
+```
 
-Features listed above are planned and will be marked complete
-only after implementation and testing.
+Open `http://localhost:3000` in your browser. For multiplayer testing, open a second browser window or another device on the same network. For other people to connect over the internet, deploy the server to a Node-compatible host and share its URL.
 
-## Getting Started
+## Deploy to Render
 
-### Prerequisites
+This repository includes `render.yaml`. Create a new Web Service from the GitHub repository and use the Node runtime. Render should detect the blueprint configuration automatically.
 
-- Node.js and npm
-- Git
+## Controls
 
-### Installation
+- `W`, `A`, `S`, `D` or arrow keys: move
+- Mouse: aim
+- Hold left mouse button: fire
+- `R`: reload
+- Mobile: on-screen movement, fire, and reload controls
 
-Clone the repository:
+## Notes
 
-    git clone https://github.com/mrnikhilsinha07/BattleRoyale2D.git
+This is an early playable build. Matchmaking, combat, and UI should be tested with multiple clients before a public tournament or production launch. No login is required.
 
-Navigate to the project directory:
 
-    cd BattleRoyale2D
-
-Install dependencies:
-
-    npm install
-
-### Running the Game
-
-Run instructions will be added after the initial game implementation
-and development server are configured.
-
-## Project Goals
-
-Build a playable, real-time multiplayer battle royale that people
-can access from separate devices through a public URL without
-installing a separate application.
-
-## License
-
-License not selected yet.
+### Character visibility fix
+The arena camera now centers directly on the local player, and rendering continues while waiting for state packets or after elimination. If the arena still appears blank, check the browser Console (F12) for runtime errors.

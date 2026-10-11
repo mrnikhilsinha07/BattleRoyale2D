@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#101820">
+  <title>LAST STAND — Battle Royale</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <main class="shell">
+    <header class="topbar">
+      <div class="brand-mark">LS</div>
+      <div>
+        <div class="brand-title">LAST STAND</div>
+        <div class="brand-subtitle">MULTIPLAYER SURVIVAL ARENA</div>
+      </div>
+      <div class="online-pill"><span></span> ONLINE READY</div>
+    </header>
+
+    <section id="menu" class="menu-panel">
+      <div class="hero-copy">
+        <p class="eyebrow">DROP IN. FIGHT SMART. SURVIVE.</p>
+        <h1>Only one<br><span>stands.</span></h1>
+        <p class="hero-description">A fast top-down battle royale. Create a room, invite your squad, and be the last player alive.</p>
+      </div>
+      <div class="lobby-card">
+        <label for="playerName">PLAYER NAME</label>
+        <input id="playerName" maxlength="16" placeholder="Enter your name" value="Player">
+        <button id="createBtn" class="button primary">CREATE ROOM <span>↗</span></button>
+        <div class="divider"><span>OR JOIN FRIENDS</span></div>
+        <div class="join-row">
+          <input id="roomCode" maxlength="5" placeholder="ROOM CODE" autocomplete="off">
+          <button id="joinBtn" class="button secondary">JOIN</button>
+        </div>
+        <p id="notice" class="notice" role="status">No downloads. No account. Just play.</p>
+      </div>
+      <div class="menu-footer"><span>WASD / ARROWS TO MOVE</span><span>MOUSE TO AIM & FIRE</span><span>R TO RELOAD</span></div>
+    </section>
+
+    <section id="lobby" class="lobby-panel hidden">
+      <div class="lobby-heading">
+        <div><p class="eyebrow">SQUAD LOBBY</p><h2>Assemble your team</h2></div>
+        <div class="room-code-box"><small>ROOM CODE</small><strong id="roomCodeDisplay">-----</strong><button id="copyCodeBtn" title="Copy room code">COPY</button></div>
+      </div>
+      <p class="muted">Share this code with friends. The host can start when at least two players have joined.</p>
+      <div id="playerList" class="player-list"></div>
+      <div class="lobby-actions">
+        <button id="startBtn" class="button primary">START MATCH</button>
+        <button id="leaveBtn" class="button secondary">LEAVE ROOM</button>
+      </div>
+      <p id="lobbyNotice" class="notice">Waiting for players…</p>
+    </section>
+
+    <section id="gamePanel" class="game-panel hidden">
+      <div class="game-hud">
+        <div class="hud-item"><small>ALIVE</small><strong id="aliveCount">0</strong></div>
+        <div class="hud-item"><small>HEALTH</small><strong id="healthValue">100</strong></div>
+        <div class="hud-item"><small>AMMO</small><strong id="ammoValue">24 / 24</strong></div>
+        <div class="hud-item zone-hud"><small>SAFE ZONE</small><strong id="zoneValue">STABLE</strong></div>
+        <button id="quitGameBtn" class="button small secondary">LEAVE MATCH</button>
+      </div>
+      <div id="gameRoot" class="game-root"></div>
+      <div class="mobile-controls">
+        <div class="touch-pad" id="touchPad"><span>MOVE</span><i id="touchStick"></i></div>
+        <button id="mobileFire" class="fire-button">FIRE</button>
+        <button id="mobileReload" class="reload-button">RELOAD</button>
+      </div>
+      <p class="game-tip">WASD / arrows: move · Mouse: aim · Hold click: fire · R: reload · Stay inside the shrinking zone.</p>
+    </section>
+
+    <section id="resultPanel" class="result-panel hidden">
+      <p class="eyebrow">MATCH COMPLETE</p>
+      <h2 id="resultTitle">LAST STAND</h2>
+      <p id="resultText">The arena has gone quiet.</p>
+      <button id="backToLobbyBtn" class="button primary">BACK TO LOBBY</button>
+    </section>
+    <footer class="site-footer"><span>LAST STAND © 2026</span><span>EARLY PLAYABLE BUILD</span></footer>
+  </main>
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="/vendor/phaser.min.js"></script>
+  <script src="/game.js"></script>
+</body>
+</html>
