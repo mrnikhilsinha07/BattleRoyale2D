@@ -19,6 +19,13 @@ const BULLET_RADIUS = 5;
 const MAGAZINE_SIZE = 24;
 const RELOAD_MS = 1300;
 const SHOOT_COOLDOWN_MS = 180;
+const INPUT_RATE_LIMIT_MS = 40;
+const SHOOT_RATE_LIMIT_MS = 100;
+const MAX_INPUT_ANGLE = Math.PI * 2;
+
+function isValidAngle(angle) {
+  return Number.isFinite(angle) && Math.abs(angle) <= MAX_INPUT_ANGLE;
+}
 
 const OBSTACLES = [
   { x: 260, y: 220, w: 180, h: 90 },
@@ -194,23 +201,42 @@ io.on("connection", socket => {
   });
 
   socket.on("playerInput", input => {
-    const room = rooms.get(socket.data.roomCode);
-    const p = room?.players.get(socket.id);
-    if (!p || room.status !== "playing" || !p.alive) return;
-    p.input = {
-      up: !!input?.up, down: !!input?.down, left: !!input?.left, right: !!input?.right,
-      angle: Number.isFinite(input?.angle) ? input.angle : p.input.angle
-    };
-  });
+  const room = rooms.get(socket.data.roomCode);
+  const p = room?.players.get(socket.id);
 
+  if (!room || !p || room.status !== "playing" || !p.alive) return;
+  if (!input || typeof input !== "object") return;
+
+  const now = Date.now();
+
+  if (p.lastInputAt && now - p.lastInputAt < INPUT_RATE_LIMIT_MS) {
+    return;
+  }
+
+  const angle = Number(input.angle);
+
+  if (!isValidAngle(angle)) return;
+
+  p.lastInputAt = now;
+
+  p.input = {
+    up: input.up === true,
+    down: input.down === true,
+    left: input.left === true,
+    right: input.right === true,
+    angle
+  };
+});
   socket.on("shoot", payload => {
     const room = rooms.get(socket.data.roomCode);
     const p = room?.players.get(socket.id);
-    if (!p || room.status !== "playing" || !p.alive) return;
+    if (!room || !p || room.status !== "playing" || !p.alive) return;
     const now = Date.now();
     if (now < p.reloadingUntil || now - p.lastShot < SHOOT_COOLDOWN_MS || p.ammo <= 0) return;
-    const angle = Number(payload?.angle);
-    if (!Number.isFinite(angle)) return;
+    if (!payload || typeof payload !== "object") return;
+
+    const angle = Number(payload.angle);
+    if (!isValidAngle(angle)) return;
     p.lastShot = now;
     p.ammo -= 1;
     room.bullets.push({
