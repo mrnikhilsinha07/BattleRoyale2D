@@ -104,3 +104,10 @@ input:focus { border-color:var(--accent); box-shadow:0 0 0 2px #c9f26918; }
   .reload-button { width:56px; height:56px; }
   .game-tip { line-height:1.6; }
 }
+
+/* Match overlay polish */
+.game-root { position: relative; }
+.kill-feed { position: absolute; z-index: 20; top: 14px; right: 14px; display: flex; flex-direction: column; gap: 5px; width: min(300px, 48%); pointer-events: none; }
+.kill-feed-row { background: rgba(8, 16, 20, .82); border: 1px solid rgba(201, 242, 105, .25); border-left: 3px solid #c9f269; border-radius: 5px; padding: 8px 10px; color: #edf4f6; font-size: 10px; font-weight: 700; letter-spacing: .25px; box-shadow: 0 5px 18px #0003; animation: feed-in .18s ease-out; }
+@keyframes feed-in { from { opacity: 0; transform: translateX(8px); } to { opacity: 1; transform: translateX(0); } }
+@media (max-width: 760px) { .kill-feed { top: 7px; right: 7px; width: min(235px, 56%); gap: 3px; } .kill-feed-row { font-size: 9px; padding: 6px 7px; } }

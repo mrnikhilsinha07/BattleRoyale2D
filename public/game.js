@@ -20,6 +20,9 @@
   let mobileMove = { x: 0, y: 0 };
   let mobileAim = 0;
   let lastShotSent = 0;
+  let hitFlashUntil = 0;
+  const killFeedItems = [];
+  let killFeedEl = null;
 
   function show(el) { [menu, lobby, gamePanel, resultPanel].forEach(x => x.classList.add("hidden")); el.classList.remove("hidden"); }
   function playerName() { return playerNameInput.value.trim().slice(0, 16) || "Player"; }
@@ -94,6 +97,7 @@
   });
   socket.on("matchStarted", config => {
     matchActive = true;
+    killFeedEl = null; killFeedItems.length = 0;
     show(gamePanel);
     $("gameRoot").innerHTML = "";
     createGame(config);
@@ -103,8 +107,11 @@
     updateHud(state);
   });
   socket.on("playerEliminated", info => {
-    if (info.id === localPlayerId) setGameTip("You were eliminated. Watch the remaining players.");
+    if (info.id === localPlayerId) setGameTip("YOU WERE ELIMINATED — spectating remaining players.");
+    const killer = info.by ? (latestState?.players || []).find(p => p.id === info.by)?.name : null;
+    addKillFeed(info.byZone ? `${info.name} was lost to the zone` : killer ? `${killer} eliminated ${info.name}` : `${info.name} was eliminated`);
   });
+  socket.on("hitConfirmed", () => { hitFlashUntil = performance.now() + 180; });
   socket.on("matchOver", result => {
     matchActive = false;
     $("resultTitle").textContent = result.winner ? (result.winner.id === localPlayerId ? "VICTORY" : "MATCH OVER") : "NO WINNER";
@@ -172,6 +179,21 @@
     $("zoneValue").textContent = state.zone.radius < 200 ? "CRITICAL" : `${Math.ceil(state.zone.radius)}m`;
   }
 
+  function addKillFeed(message) {
+    if (!killFeedEl) {
+      killFeedEl = document.createElement("div"); killFeedEl.className = "kill-feed";
+      killFeedEl.setAttribute("aria-live", "polite"); $("gameRoot").appendChild(killFeedEl);
+    }
+    killFeedItems.unshift({ message, until: Date.now() + 5200 }); killFeedItems.splice(5); renderKillFeed();
+  }
+  function renderKillFeed() {
+    if (!killFeedEl) return;
+    const now = Date.now();
+    while (killFeedItems.length && killFeedItems[killFeedItems.length - 1].until < now) killFeedItems.pop();
+    killFeedEl.replaceChildren();
+    killFeedItems.forEach(item => { const row = document.createElement("div"); row.className = "kill-feed-row"; row.textContent = item.message; killFeedEl.appendChild(row); });
+  }
+
   function createGame(config) {
     const W = config.width;
     const H = config.height;
@@ -180,7 +202,24 @@
       create() {
         this.cameras.main.setBounds(0, 0, W, H);
         this.physics?.world?.setBounds(0, 0, W, H);
-        this.add.rectangle(W / 2, H / 2, W, H, 0x233b31).setDepth(-10);
+        this.add.rectangle(W / 2, H / 2, W, H, 0x263c31).setDepth(-10);
+        // Procedural battlefield dressing: deterministic foliage and stone details.
+        const decor = this.add.graphics().setDepth(-8);
+        let seed = 713;
+        const rand = () => { seed = (seed * 16807) % 2147483647; return (seed - 1) / 2147483646; };
+        for (let i = 0; i < 230; i++) {
+          const x = rand() * W, y = rand() * H, r = 8 + rand() * 19;
+          if (obstacles.some(o => x > o.x - 35 && x < o.x + o.w + 35 && y > o.y - 35 && y < o.y + o.h + 35)) continue;
+          if (i % 3 === 0) {
+            decor.fillStyle(0x13251d, 0.42); decor.fillCircle(x + 3, y + 5, r + 3);
+            decor.fillStyle(i % 2 ? 0x426247 : 0x385640, 0.72); decor.fillCircle(x, y, r);
+            decor.fillStyle(0x75906b, 0.35); decor.fillCircle(x - r * .22, y - r * .25, r * .52);
+          } else {
+            decor.fillStyle(0x101d17, 0.25); decor.fillEllipse(x + 3, y + 4, r * 1.7, r);
+            decor.fillStyle(i % 2 ? 0x788174 : 0x5f6d61, 0.58); decor.fillEllipse(x, y, r * 1.6, r * .9);
+            decor.lineStyle(1, 0xc3cbb7, 0.2); decor.strokeEllipse(x, y, r * 1.6, r * .9);
+          }
+        }
         const grid = this.add.graphics().setDepth(-9);
         grid.lineStyle(1, 0xffffff, 0.035);
         for (let x = 0; x <= W; x += 60) { grid.lineBetween(x, 0, x, H); }
@@ -199,6 +238,8 @@
         this.zoneGraphics = this.add.graphics().setDepth(2);
         this.bulletGraphics = this.add.graphics().setDepth(5);
         this.pickupGraphics = this.add.graphics().setDepth(3);
+        this.effectGraphics = this.add.graphics().setDepth(6);
+        this.previousBullets = new Map();
         this.playersLayer = this.add.container(0, 0).setDepth(4);
         this.playerObjects = new Map();
         this.labelObjects = new Map();
@@ -254,10 +295,10 @@
         if (!latestState || !Array.isArray(latestState.players)) return;
         this.zoneGraphics.clear();
         const z = latestState.zone;
-        this.zoneGraphics.fillStyle(0x7db6ff, 0.055);
-        this.zoneGraphics.fillCircle(z.x, z.y, z.radius);
-        this.zoneGraphics.lineStyle(5, 0x79b9ff, 0.85);
-        this.zoneGraphics.strokeCircle(z.x, z.y, z.radius);
+        this.zoneGraphics.fillStyle(0x7db6ff, 0.045); this.zoneGraphics.fillCircle(z.x, z.y, z.radius);
+        this.zoneGraphics.lineStyle(18, 0x428cff, 0.07); this.zoneGraphics.strokeCircle(z.x, z.y, z.radius);
+        this.zoneGraphics.lineStyle(5, 0x79b9ff, 0.88); this.zoneGraphics.strokeCircle(z.x, z.y, z.radius);
+        this.zoneGraphics.lineStyle(1, 0xc8e5ff, 0.7); this.zoneGraphics.strokeCircle(z.x, z.y, z.radius - 4);
         this.pickupGraphics.clear();
         (latestState.pickups || []).forEach(pickup => {
           const isRifle = pickup.weapon === "rifle";
@@ -273,11 +314,20 @@
         });
         this.bulletGraphics.clear();
         (latestState.bullets || []).forEach(b => {
-          this.bulletGraphics.fillStyle(0xfff0a5, 1);
-          this.bulletGraphics.fillCircle(b.x, b.y, 5);
-          this.bulletGraphics.fillStyle(0xffb84d, 0.25);
-          this.bulletGraphics.fillCircle(b.x, b.y, 10);
+          const prev = this.previousBullets.get(b.id);
+          if (prev) { this.bulletGraphics.lineStyle(3, 0xffb84d, 0.42); this.bulletGraphics.lineBetween(prev.x, prev.y, b.x, b.y); }
+          this.bulletGraphics.fillStyle(0xffa83d, 0.2); this.bulletGraphics.fillCircle(b.x, b.y, 12);
+          this.bulletGraphics.fillStyle(0xffd36e, 1); this.bulletGraphics.fillCircle(b.x, b.y, 4);
+          this.bulletGraphics.fillStyle(0xffffff, 0.95); this.bulletGraphics.fillCircle(b.x, b.y, 1.8);
         });
+        this.previousBullets = new Map((latestState.bullets || []).map(b => [b.id, { x: b.x, y: b.y }]));
+        this.effectGraphics.clear();
+        if (performance.now() < hitFlashUntil) {
+          this.effectGraphics.lineStyle(5, 0xc9f269, 0.95);
+          const meForFlash = latestState.players.find(p => p.id === localPlayerId);
+          if (meForFlash) this.effectGraphics.strokeCircle(meForFlash.x, meForFlash.y, 30 + (hitFlashUntil - performance.now()) * .18);
+        }
+        renderKillFeed();
         const existing = new Set();
         latestState.players.forEach(p => {
           existing.add(p.id);
@@ -294,15 +344,20 @@
           if (p.alive) {
             const safeColor = /^#[0-9a-fA-F]{6}$/.test(p.color || "") ? p.color : "#7dd3fc";
             const color = Phaser.Display.Color.HexStringToColor(safeColor).color;
-            g.fillStyle(0x000000, 0.25); g.fillCircle(p.x + 2, p.y + 4, 20);
-            g.fillStyle(color, 1); g.fillCircle(p.x, p.y, 17);
+            const ux = Math.cos(p.angle), uy = Math.sin(p.angle);
+            g.fillStyle(0x000000, 0.32); g.fillEllipse(p.x + 3, p.y + 7, 39, 27);
+            g.fillStyle(0x17231f, 1); g.fillRoundedRect(p.x - 11, p.y - 11, 22, 25, 6);
+            g.fillStyle(color, 1); g.fillRoundedRect(p.x - 13, p.y - 12, 26, 25, 7);
+            g.fillStyle(0x26352e, 1); g.fillRoundedRect(p.x - 8, p.y - 7, 16, 16, 5);
+            g.fillStyle(0xe0c7a2, 1); g.fillCircle(p.x + ux * 2, p.y + uy * 2, 7);
+            g.fillStyle(0x26343a, 1); g.fillRoundedRect(p.x + ux * 5 - 4, p.y + uy * 5 - 4, 31, 8, 3);
+            g.lineStyle(3, 0xb7c7c6, 1); g.lineBetween(p.x + ux * 5, p.y + uy * 5, p.x + ux * 29, p.y + uy * 29);
+            g.fillStyle(0xffd36e, 0.9); g.fillCircle(p.x + ux * 32, p.y + uy * 32, 2.5);
             g.lineStyle(p.id === localPlayerId ? 3 : 2, p.id === localPlayerId ? 0xc9f269 : 0xf4f5f0, 1);
-            g.strokeCircle(p.x, p.y, 17);
-            g.lineStyle(7, 0x26343a, 1); g.lineBetween(p.x, p.y, p.x + Math.cos(p.angle) * 28, p.y + Math.sin(p.angle) * 28);
-            g.lineStyle(3, 0xb7c7c6, 1); g.lineBetween(p.x, p.y, p.x + Math.cos(p.angle) * 27, p.y + Math.sin(p.angle) * 27);
-            hp.clear(); hp.fillStyle(0x101820, 0.9); hp.fillRoundedRect(p.x - 20, p.y - 31, 40, 5, 2);
-            hp.fillStyle(p.hp <= 30 ? 0xff6b68 : 0xc9f269, 1); hp.fillRoundedRect(p.x - 20, p.y - 31, 40 * Math.max(0, p.hp) / 100, 5, 2);
-            label.setPosition(p.x, p.y - 35).setAlpha(1);
+            g.strokeRoundedRect(p.x - 14, p.y - 13, 28, 27, 7);
+            hp.clear(); hp.fillStyle(0x08110d, 0.95); hp.fillRoundedRect(p.x - 21, p.y - 34, 42, 7, 3);
+            hp.fillStyle(p.hp <= 30 ? 0xff6b68 : p.hp <= 60 ? 0xffc45e : 0xc9f269, 1); hp.fillRoundedRect(p.x - 20, p.y - 33, 40 * Math.max(0, p.hp) / 100, 5, 2);
+            label.setPosition(p.x, p.y - 39).setAlpha(1);
           } else {
             hp.clear();
             label.setPosition(p.x, p.y - 15).setAlpha(0.35).setText(`${p.name} · OUT`);
