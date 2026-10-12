@@ -65,8 +65,13 @@
         <div class="touch-pad" id="touchPad"><span>MOVE</span><i id="touchStick"></i></div>
         <button id="mobileFire" class="fire-button">FIRE</button>
         <button id="mobileReload" class="reload-button">RELOAD</button>
+        <div class="mobile-weapons" role="group" aria-label="Select weapon">
+          <button type="button" class="weapon-button active" data-weapon="pistol">1<br><span>PISTOL</span></button>
+          <button type="button" class="weapon-button" data-weapon="rifle">2<br><span>RIFLE</span></button>
+          <button type="button" class="weapon-button" data-weapon="shotgun">3<br><span>SHOTGUN</span></button>
+        </div>
       </div>
-      <p class="game-tip">WASD / arrows: move · Mouse: aim · Hold click: fire · R: reload · Stay inside the shrinking zone.</p>
+      <p class="game-tip">Desktop: WASD / arrows, mouse to aim and fire, R to reload. Mobile: joystick to move, FIRE to attack, weapon buttons to switch. Stay inside the shrinking zone.</p>
     </section>
 
     <section id="resultPanel" class="result-panel hidden">

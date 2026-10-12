@@ -127,6 +127,9 @@
   });
   socket.on("weaponSwitched", data => {
     const name = ({ pistol: "PISTOL", rifle: "ASSAULT RIFLE", shotgun: "SHOTGUN" })[data?.weapon] || "WEAPON";
+    document.querySelectorAll(".weapon-button").forEach(button => {
+      button.classList.toggle("active", button.dataset.weapon === data?.weapon);
+    });
     setGameTip(`Equipped ${name}.`);
     if (latestState) updateHud(latestState);
   });
@@ -386,7 +389,21 @@
   const mobileFire = $("mobileFire");
   mobileFire.addEventListener("pointerdown", e => { e.preventDefault(); mobileFireHeld = true; });
   ["pointerup", "pointercancel", "pointerleave"].forEach(evt => mobileFire.addEventListener(evt, () => mobileFireHeld = false));
-  $("mobileReload").addEventListener("click", () => socket.emit("reload"));
+  $("mobileReload").addEventListener("pointerdown", e => {
+    e.preventDefault();
+    socket.emit("reload");
+  });
+
+  document.querySelectorAll(".weapon-button").forEach(button => {
+    button.addEventListener("pointerdown", e => {
+      e.preventDefault();
+      const weapon = button.dataset.weapon;
+      socket.emit("switchWeapon", weapon);
+      document.querySelectorAll(".weapon-button").forEach(b => {
+        b.classList.toggle("active", b.dataset.weapon === weapon);
+      });
+    });
+  });
 
   const touchPad = $("touchPad");
   const touchStick = $("touchStick");
